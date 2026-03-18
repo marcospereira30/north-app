@@ -32,6 +32,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 .google-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:14px;border-radius:var(--r2);background:var(--bg4);border:1px solid var(--border2);cursor:pointer;font-size:14px;font-weight:700;color:var(--text);font-family:var(--font);transition:all 0.2s}
 .google-btn:hover{border-color:var(--accent);background:var(--accentbg)}
 .login-note{font-size:11px;color:var(--text3);margin-top:14px;font-family:var(--mono)}
+/* PIN SCREEN */
+.pin-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.pin-card{background:var(--bg2);border:1px solid var(--border2);border-radius:24px;padding:44px 40px;text-align:center;max-width:380px;width:100%}
+.pin-logo{font-size:32px;font-weight:800;color:var(--text);margin-bottom:4px;font-family:var(--font)}
+.pin-logo em{color:var(--accent);font-style:normal}
+.pin-sub{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.15em;margin-bottom:32px}
+.pin-title{font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px;font-family:var(--font)}
+.pin-desc{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:24px}
+.pin-input{width:100%;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r2);padding:14px 16px;font-size:15px;color:var(--text);font-family:var(--mono);outline:none;text-align:center;letter-spacing:0.2em;font-weight:500;transition:border-color 0.15s;text-transform:uppercase}
+.pin-input:focus{border-color:var(--accent)}
+.pin-input.error{border-color:var(--red);animation:shake 0.3s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.pin-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:var(--r2);background:var(--accent);border:none;cursor:pointer;font-size:14px;font-weight:700;color:#fff;font-family:var(--font);transition:all 0.2s;margin-top:12px}
+.pin-btn:hover{filter:brightness(1.15)}
+.pin-error{font-size:12px;color:var(--red);margin-top:8px;font-family:var(--mono);min-height:18px}
+.pin-note{font-size:11px;color:var(--text3);margin-top:16px;font-family:var(--mono)}
 .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px}
 .spinner{width:36px;height:36px;border:3px solid var(--bg5);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -408,6 +424,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
   </div>
 </div>
 <div id="screen-app" class="layout" style="display:none">
+<div id="pin-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;align-items:center;justify-content:center">
+  <div class="pin-card">
+    <div class="pin-logo">N<em>O</em>RTH</div>
+    <div class="pin-sub">VERIFICAÇÃO DE ACESSO</div>
+    <div class="pin-title">Código de acesso</div>
+    <div class="pin-desc">Seu acesso ainda não foi liberado. Insira o código que você recebeu para continuar.</div>
+    <input class="pin-input" id="pin-input" type="text" maxlength="10" placeholder="NORTH-0000" onkeydown="if(event.key==='Enter')checkPin()">
+    <div class="pin-error" id="pin-error"></div>
+    <button class="pin-btn" onclick="checkPin()">Verificar acesso →</button>
+    <button style="background:transparent;border:none;color:var(--text3);font-size:12px;cursor:pointer;margin-top:12px;font-family:var(--mono)" onclick="auth.signOut()">← Sair e trocar de conta</button>
+  </div>
+</div>
   <aside class="sidebar">
     <div class="logo-wrap">
       <div class="logo-block"><div class="logo">N<em>O</em>RTH</div><div class="logo-sub">PRODUTIVIDADE</div></div>
@@ -547,6 +575,32 @@ function vMsg(days){
   return`${days} dias. Continue. Cada dia conta.`;}
 function vDays(v){if(!v.startDate)return 0;const now=new Date();const s=new Date(v.startDate+'T12:00:00');const diff=Math.floor((now-s)/(1000*60*60*24));return Math.max(0,diff);}
 
+// PIN SYSTEM
+const VALID_PINS=['NORTH-4829','NORTH-7163','NORTH-3547','NORTH-9201','NORTH-6384','NORTH-1756','NORTH-8042','NORTH-5918','NORTH-2673','NORTH-7430'];
+const OWNER_EMAIL='marcos.pereira2300@gmail.com';
+function isPinVerified(){try{return sessionStorage.getItem('north-pin')==='ok';}catch(e){return false;}}
+function setPinVerified(){try{sessionStorage.setItem('north-pin','ok');}catch(e){}}
+function showPinOverlay(){
+  const o=document.getElementById('pin-overlay');
+  if(o){o.style.display='flex';setTimeout(()=>{const el=document.getElementById('pin-input');if(el)el.focus();},100);}
+}
+function hidePinOverlay(){
+  const o=document.getElementById('pin-overlay');if(o)o.style.display='none';
+}
+window.checkPin=function(){
+  const val=document.getElementById('pin-input').value.trim().toUpperCase();
+  const inp=document.getElementById('pin-input');
+  const err=document.getElementById('pin-error');
+  if(VALID_PINS.includes(val)){
+    setPinVerified();inp.classList.remove('error');err.textContent='';
+    hidePinOverlay();
+  } else {
+    inp.classList.add('error');err.textContent='Código inválido. Tente novamente.';inp.value='';
+    setTimeout(()=>inp.classList.remove('error'),400);
+  }
+}
+
+// AUTH
 // AUTH
 window.signInGoogle=async function(){
   const p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});
@@ -556,11 +610,30 @@ window.signOut=async function(){
   [uG,uT,uV].forEach(u=>{if(u)u();});S.goals=[];S.tasks=[];S.vicios=[];await auth.signOut();};
 auth.onAuthStateChanged(u=>{
   document.getElementById('screen-loading').style.display='none';
-  if(u){cu=u;document.getElementById('screen-login').style.display='none';document.getElementById('screen-app').style.display='flex';
-    const fn=(u.displayName||'Usuário').split(' ')[0];document.getElementById('user-name').textContent=fn;
-    const av=document.getElementById('user-avatar');if(u.photoURL)av.innerHTML=`<img src="${u.photoURL}" alt="">`;else av.textContent=fn[0].toUpperCase();
-    listenData();updateSDate();
-  }else{cu=null;document.getElementById('screen-app').style.display='none';document.getElementById('screen-login').style.display='flex';}});
+  if(u){
+    cu=u;
+    document.getElementById('screen-login').style.display='none';
+    document.getElementById('screen-app').style.display='flex';
+    const fn=(u.displayName||'Usuário').split(' ')[0];
+    document.getElementById('user-name').textContent=fn;
+    const av=document.getElementById('user-avatar');
+    if(u.photoURL)av.innerHTML=`<img src="${u.photoURL}" alt="">`;else av.textContent=fn[0].toUpperCase();
+    // Owner bypass PIN
+    if(u.email===OWNER_EMAIL||isPinVerified()){
+      hidePinOverlay();
+      listenData();updateSDate();
+    } else {
+      // Show PIN overlay after login
+      showPinOverlay();
+      listenData();updateSDate();
+    }
+  } else {
+    cu=null;
+    hidePinOverlay();
+    document.getElementById('screen-app').style.display='none';
+    document.getElementById('screen-login').style.display='flex';
+  }
+});
 
 function listenData(){
   if(!cu)return;const id=cu.uid;
