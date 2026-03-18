@@ -411,18 +411,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 </head>
 <body>
 <div id="screen-loading" class="loading-screen"><div class="spinner"></div><div class="loading-txt">CARREGANDO...</div></div>
-<div id="screen-pin" class="pin-screen" style="display:none">
-  <div class="pin-card">
-    <div class="pin-logo">N<em>O</em>RTH</div>
-    <div class="pin-sub">ACESSO RESTRITO</div>
-    <div class="pin-title">Digite seu PIN</div>
-    <div class="pin-desc">Este app está em fase de testes. Insira o PIN de acesso para continuar.</div>
-    <input class="pin-input" id="pin-input" type="text" maxlength="10" placeholder="NORTH-0000" onkeydown="if(event.key==='Enter')checkPin()">
-    <div class="pin-error" id="pin-error"></div>
-    <button class="pin-btn" onclick="checkPin()">Continuar →</button>
-    <div class="pin-note">Não tem PIN? Entre em contato com o administrador.</div>
-  </div>
-</div>
 <div id="screen-login" class="login-screen" style="display:none">
   <div class="login-card">
     <div class="login-logo">N<em>O</em>RTH</div><div class="login-sub">METAS & PRODUTIVIDADE</div>
@@ -436,6 +424,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
   </div>
 </div>
 <div id="screen-app" class="layout" style="display:none">
+<div id="pin-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;align-items:center;justify-content:center">
+  <div class="pin-card">
+    <div class="pin-logo">N<em>O</em>RTH</div>
+    <div class="pin-sub">VERIFICAÇÃO DE ACESSO</div>
+    <div class="pin-title">Código de acesso</div>
+    <div class="pin-desc">Seu acesso ainda não foi liberado. Insira o código que você recebeu para continuar.</div>
+    <input class="pin-input" id="pin-input" type="text" maxlength="10" placeholder="NORTH-0000" onkeydown="if(event.key==='Enter')checkPin()">
+    <div class="pin-error" id="pin-error"></div>
+    <button class="pin-btn" onclick="checkPin()">Verificar acesso →</button>
+    <button style="background:transparent;border:none;color:var(--text3);font-size:12px;cursor:pointer;margin-top:12px;font-family:var(--mono)" onclick="auth.signOut()">← Sair e trocar de conta</button>
+  </div>
+</div>
   <aside class="sidebar">
     <div class="logo-wrap">
       <div class="logo-block"><div class="logo">N<em>O</em>RTH</div><div class="logo-sub">PRODUTIVIDADE</div></div>
@@ -578,33 +578,29 @@ function vDays(v){if(!v.startDate)return 0;const now=new Date();const s=new Date
 // PIN SYSTEM
 const VALID_PINS=['NORTH-4829','NORTH-7163','NORTH-3547','NORTH-9201','NORTH-6384','NORTH-1756','NORTH-8042','NORTH-5918','NORTH-2673','NORTH-7430'];
 const OWNER_EMAIL='marcos.pereira2300@gmail.com';
-let pinVerified=false;
-
-function isPinVerified(){
-  try{return sessionStorage.getItem('north-pin')==='ok';}catch(e){return false;}
+function isPinVerified(){try{return sessionStorage.getItem('north-pin')==='ok';}catch(e){return false;}}
+function setPinVerified(){try{sessionStorage.setItem('north-pin','ok');}catch(e){}}
+function showPinOverlay(){
+  const o=document.getElementById('pin-overlay');
+  if(o){o.style.display='flex';setTimeout(()=>{const el=document.getElementById('pin-input');if(el)el.focus();},100);}
 }
-function setPinVerified(){
-  try{sessionStorage.setItem('north-pin','ok');}catch(e){}
-  pinVerified=true;
+function hidePinOverlay(){
+  const o=document.getElementById('pin-overlay');if(o)o.style.display='none';
 }
 window.checkPin=function(){
   const val=document.getElementById('pin-input').value.trim().toUpperCase();
   const inp=document.getElementById('pin-input');
   const err=document.getElementById('pin-error');
   if(VALID_PINS.includes(val)){
-    setPinVerified();
-    inp.classList.remove('error');
-    err.textContent='';
-    document.getElementById('screen-pin').style.display='none';
-    document.getElementById('screen-login').style.display='flex';
+    setPinVerified();inp.classList.remove('error');err.textContent='';
+    hidePinOverlay();
   } else {
-    inp.classList.add('error');
-    err.textContent='PIN inválido. Tente novamente.';
-    inp.value='';
+    inp.classList.add('error');err.textContent='Código inválido. Tente novamente.';inp.value='';
     setTimeout(()=>inp.classList.remove('error'),400);
   }
-};
+}
 
+// AUTH
 // AUTH
 window.signInGoogle=async function(){
   const p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});
@@ -615,26 +611,27 @@ window.signOut=async function(){
 auth.onAuthStateChanged(u=>{
   document.getElementById('screen-loading').style.display='none';
   if(u){
-    // Owner always has access
     cu=u;
-    document.getElementById('screen-pin').style.display='none';
     document.getElementById('screen-login').style.display='none';
     document.getElementById('screen-app').style.display='flex';
-    const fn=(u.displayName||'Usuário').split(' ')[0];document.getElementById('user-name').textContent=fn;
-    const av=document.getElementById('user-avatar');if(u.photoURL)av.innerHTML=`<img src="${u.photoURL}" alt="">`;else av.textContent=fn[0].toUpperCase();
-    listenData();updateSDate();
+    const fn=(u.displayName||'Usuário').split(' ')[0];
+    document.getElementById('user-name').textContent=fn;
+    const av=document.getElementById('user-avatar');
+    if(u.photoURL)av.innerHTML=`<img src="${u.photoURL}" alt="">`;else av.textContent=fn[0].toUpperCase();
+    // Owner bypass PIN
+    if(u.email===OWNER_EMAIL||isPinVerified()){
+      hidePinOverlay();
+      listenData();updateSDate();
+    } else {
+      // Show PIN overlay after login
+      showPinOverlay();
+      listenData();updateSDate();
+    }
   } else {
     cu=null;
+    hidePinOverlay();
     document.getElementById('screen-app').style.display='none';
-    // Check if PIN already verified this session
-    if(isPinVerified()||u?.email===OWNER_EMAIL){
-      document.getElementById('screen-pin').style.display='none';
-      document.getElementById('screen-login').style.display='flex';
-    } else {
-      document.getElementById('screen-login').style.display='none';
-      document.getElementById('screen-pin').style.display='flex';
-      setTimeout(()=>{const el=document.getElementById('pin-input');if(el)el.focus();},100);
-    }
+    document.getElementById('screen-login').style.display='flex';
   }
 });
 
@@ -841,11 +838,15 @@ function rTasks(){
     <div class="prio-item"><div class="prio-dot" style="background:var(--blue)"></div>Baixa<span class="prio-count">${loC}</span></div>
   </div></div></div></div>`;return h;}
 
-function tCard(t,up=false){const done=tDT(t);const pc=pC(t.prio||'med');const rl=RECURS.find(r=>r.k===t.recur);
+function tCard(t,up=false){const done=tDT(t);const pc=pC(t.prio||'med');
   return `<div class="task-item${done?' done-item':''}">
     <div class="task-prio" style="background:${pc}"></div>
     <div class="task-chk${done?' on':''}" onclick="togT('${t.id}')"></div>
-    <div style="flex:1;min-width:0"><div class="task-text${done?' done':''}">${t.text}</div>${t.note?`<div style="font-size:10px;color:var(--text3);margin-top:2px">${t.note}</div>`:''}</div>
+    <div style="flex:1;min-width:0">
+      <div class="task-text${done?' done':''}">${t.text}</div>
+      ${t.time?`<div style="font-size:10px;color:var(--accent2);margin-top:2px;font-family:var(--mono)">🕐 ${t.time}${t.gcalSync?` · <span style="color:var(--green)">📅 Calendar</span>`:''}</div>`:''}
+      ${t.note?`<div style="font-size:10px;color:var(--text3);margin-top:2px">${t.note}</div>`:''}
+    </div>
     <div class="task-meta">${t.cat?`<span class="task-tag" style="background:${cC(t.cat)}18;color:${cC(t.cat)}">${t.cat}</span>`:''}${t.recur&&t.recur!=='none'?'<span class="recur-badge">🔁</span>':''}${up&&t.date?`<span class="task-tag tag-due" style="font-size:9px">${fmtD(t.date)}</span>`:''}</div>
     <div class="task-actions"><button class="task-icon-btn" onclick="openTM('${t.id}')">✏️</button><button class="task-icon-btn del" onclick="delT('${t.id}')">🗑</button></div>
   </div>`;}
@@ -1029,13 +1030,20 @@ window.openGM=function(eid=null){S.egid=eid;S.mt=[];sEmoji='🎯';let g=null;if(
     <div class="fgroup"><label class="flbl">Etapas</label>
       <div id="mt-list">${S.mt.map((t,i)=>`<div class="mt-row"><div class="task-chk${t.done?' on':''}" onclick="togMT(${i})" style="flex-shrink:0"></div><span style="flex:1;font-size:12px;color:var(--text2)">${t.text}</span><button class="task-icon-btn del" onclick="remMT(${i})">✕</button></div>`).join('')}</div>
       <div class="quick-add" style="margin-top:6px"><input class="quick-input" id="mt-inp" placeholder="Nova etapa..." onkeydown="if(event.key==='Enter')addMT()"><button class="quick-btn" onclick="addMT()">+ Add</button></div></div>
-    <div class="modal-ftr"><button class="btn-cl" onclick="closeModal()">Cancelar</button><button class="btn-ok" onclick="saveG()">Salvar</button></div>`;
+    ${g?.dueDate||true?`<div class="fgroup"><div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg4);border:1px solid ${gcalToken?'var(--green)44':'var(--border2)'};border-radius:var(--r)">${gcalToken?'<span style="font-size:12px;color:var(--green)">📅 Sincronizar prazo com Google Calendar automaticamente</span>':'<span style="font-size:12px;color:var(--text2)">📅 </span><button onclick="connectGCal()" style="background:transparent;border:none;color:var(--accent);font-size:12px;cursor:pointer;font-family:var(--font)">Conectar Google Calendar</button>'}</div></div>`:''}
+    <div class="modal-ftr"><button class="btn-cl" onclick="closeModal()">Cancelar</button><button class="btn-ok" onclick="saveG()">Salvar</button></div>\`;
   document.getElementById('modal').style.display='flex';setTimeout(()=>{const el=document.getElementById('g-title');if(el)el.focus();},80);};
 window.pE=function(e,btn){sEmoji=e;document.querySelectorAll('.emj').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');};
 window.togMT=function(i){S.mt[i].done=!S.mt[i].done;rMT();};window.remMT=function(i){S.mt.splice(i,1);rMT();};
 window.addMT=function(){const inp=document.getElementById('mt-inp');const v=inp.value.trim();if(!v)return;S.mt.push({id:uid(),text:v,done:false});inp.value='';rMT();};
 function rMT(){document.getElementById('mt-list').innerHTML=S.mt.map((t,i)=>`<div class="mt-row"><div class="task-chk${t.done?' on':''}" onclick="togMT(${i})" style="flex-shrink:0"></div><span style="flex:1;font-size:12px;color:var(--text2)">${t.text}</span><button class="task-icon-btn del" onclick="remMT(${i})">✕</button></div>`).join('');}
-window.saveG=async function(){const title=document.getElementById('g-title').value.trim();if(!title){document.getElementById('g-title').style.borderColor='var(--red)';return;}const prog=parseInt(document.getElementById('g-prog').value);const tasks=[...S.mt];const goal={id:S.egid||uid(),emoji:sEmoji,title,desc:document.getElementById('g-desc').value.trim(),category:document.getElementById('g-cat').value,dueDate:document.getElementById('g-date').value,progress:tasks.length?Math.round(tasks.filter(t=>t.done).length/tasks.length*100):prog,tasks,lastUpdated:today(),createdAt:S.egid?(S.goals.find(g=>g.id===S.egid)||{}).createdAt||Date.now():Date.now()};if(tasks.length===0)goal.progress=prog;if(goal.progress===100)goal.completedAt=goal.completedAt||today();closeModal();await sFS('goals',goal);toast('Meta salva! ✓','success');};
+window.saveG=async function(){const title=document.getElementById('g-title').value.trim();if(!title){document.getElementById('g-title').style.borderColor='var(--red)';return;}const prog=parseInt(document.getElementById('g-prog').value);const tasks=[...S.mt];const goal={id:S.egid||uid(),emoji:sEmoji,title,desc:document.getElementById('g-desc').value.trim(),category:document.getElementById('g-cat').value,dueDate:document.getElementById('g-date').value,progress:tasks.length?Math.round(tasks.filter(t=>t.done).length/tasks.length*100):prog,tasks,lastUpdated:today(),createdAt:S.egid?(S.goals.find(g=>g.id===S.egid)||{}).createdAt||Date.now():Date.now()};if(tasks.length===0)goal.progress=prog;if(goal.progress===100)goal.completedAt=goal.completedAt||today();closeModal();await sFS('goals',goal);
+  // Sync to Google Calendar if due date set and gcal connected
+  if(goal.dueDate&&gcalToken){
+    await addGoalToGCal(goal);
+  } else {
+    toast('Meta salva! ✓','success');
+  }};
 
 // TASK MODAL
 window.openTM=function(eid=null){S.etid=eid;let t=eid?S.tasks.find(x=>x.id===eid):null;sPrio=t?t.prio||'med':'med';sRecur=t?t.recur||'none':'none';
@@ -1043,15 +1051,56 @@ window.openTM=function(eid=null){S.etid=eid;let t=eid?S.tasks.find(x=>x.id===eid
   box.innerHTML=`<div class="modal-hd">${eid?'Editar Tarefa':'Nova Tarefa'}</div>
     <div class="fgroup"><label class="flbl">Tarefa</label><input class="finput" id="t-text" value="${t?t.text:''}" placeholder="O que precisa ser feito?"></div>
     <div class="fgroup"><label class="flbl">Nota</label><input class="finput" id="t-note" value="${t?t.note||'':''}" placeholder="Detalhes opcionais..."></div>
-    <div class="frow"><div class="fgroup"><label class="flbl">Categoria</label><select class="fselect" id="t-cat">${TCATS.map(c=>`<option value="${c}"${t&&t.cat===c?' selected':''}>${c}</option>`).join('')}</select></div>
-    <div class="fgroup"><label class="flbl">Data</label><input type="date" class="finput" id="t-date" value="${t?t.date||today():today()}"></div></div>
+    <div class="frow">
+      <div class="fgroup"><label class="flbl">Categoria</label><select class="fselect" id="t-cat">${TCATS.map(c=>`<option value="${c}"${t&&t.cat===c?' selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="fgroup"><label class="flbl">Data</label><input type="date" class="finput" id="t-date" value="${t?t.date||today():today()}"></div>
+    </div>
+    <div class="frow">
+      <div class="fgroup"><label class="flbl">Horário (opcional)</label><input type="time" class="finput" id="t-time" value="${t?t.time||'':''}" placeholder="14:00"></div>
+      <div class="fgroup" style="display:flex;flex-direction:column;justify-content:flex-end">
+        ${gcalToken
+          ?`<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg4);border:1px solid var(--green)44;border-radius:var(--r)"><span style="font-size:12px;color:var(--green)">📅 Calendar conectado</span><input type="checkbox" id="t-gcal" ${t?.gcalSync?'checked':''} style="width:16px;height:16px;cursor:pointer"><label style="font-size:11px;color:var(--text2);cursor:pointer" for="t-gcal">Sincronizar</label></div>`
+          :`<button onclick="connectGCal()" style="padding:9px 12px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font);width:100%">📅 Conectar Google Calendar</button>`
+        }
+      </div>
+    </div>
     <div class="fgroup"><label class="flbl">Prioridade</label><div class="prio-btns">${PRIOS.map(p=>`<button class="prio-btn${sPrio===p.k?' sel':''}" style="${sPrio===p.k?`background:${p.color};border-color:${p.color};color:#000`:'border-color:var(--border2);color:var(--text2)'}" onclick="pP('${p.k}',this,'${p.color}')">${p.lbl}</button>`).join('')}</div></div>
     <div class="fgroup"><label class="flbl">Recorrência</label><div class="recur-btns">${RECURS.map(r=>`<button class="recur-btn${sRecur===r.k?' sel':''}" onclick="pR('${r.k}',this)">${r.lbl}</button>`).join('')}</div></div>
     <div class="modal-ftr"><button class="btn-cl" onclick="closeModal()">Cancelar</button><button class="btn-ok" onclick="saveT()">Salvar</button></div>`;
   document.getElementById('modal').style.display='flex';setTimeout(()=>{const el=document.getElementById('t-text');if(el)el.focus();},80);};
 window.pP=function(p,btn,color){sPrio=p;document.querySelectorAll('.prio-btn').forEach(b=>{b.classList.remove('sel');b.style.background='transparent';b.style.borderColor='var(--border2)';b.style.color='var(--text2)';});btn.classList.add('sel');btn.style.background=color;btn.style.borderColor=color;btn.style.color='#000';};
 window.pR=function(r,btn){sRecur=r;document.querySelectorAll('.recur-btn').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');};
-window.saveT=async function(){const text=document.getElementById('t-text').value.trim();if(!text){document.getElementById('t-text').style.borderColor='var(--red)';return;}const ex=S.etid?S.tasks.find(t=>t.id===S.etid):null;const task={id:S.etid||uid(),text,note:document.getElementById('t-note').value.trim(),cat:document.getElementById('t-cat').value,date:document.getElementById('t-date').value||today(),prio:sPrio,recur:sRecur,weekDay:new Date().getDay(),monthDay:new Date().getDate(),done:ex?ex.done:false,lastDone:ex?ex.lastDone:null,doneHistory:ex?ex.doneHistory||{}:{},createdAt:ex?ex.createdAt:Date.now()};closeModal();await sFS('tasks',task);toast('Tarefa salva! ✓','success');};
+window.saveT=async function(){
+  const text=document.getElementById('t-text').value.trim();
+  if(!text){document.getElementById('t-text').style.borderColor='var(--red)';return;}
+  const ex=S.etid?S.tasks.find(t=>t.id===S.etid):null;
+  const timeVal=document.getElementById('t-time')?.value||'';
+  const gcalCb=document.getElementById('t-gcal');
+  const syncGcal=gcalCb?gcalCb.checked:false;
+  const task={
+    id:S.etid||uid(),text,
+    note:document.getElementById('t-note').value.trim(),
+    cat:document.getElementById('t-cat').value,
+    date:document.getElementById('t-date').value||today(),
+    time:timeVal,
+    prio:sPrio,recur:sRecur,
+    weekDay:new Date().getDay(),monthDay:new Date().getDate(),
+    done:ex?ex.done:false,lastDone:ex?ex.lastDone:null,
+    doneHistory:ex?ex.doneHistory||{}:{},
+    gcalSync:syncGcal,
+    createdAt:ex?ex.createdAt:Date.now()
+  };
+  closeModal();
+  await sFS('tasks',task);
+  // Add to Google Calendar if time is set and sync checked
+  if(timeVal&&syncGcal&&gcalToken){
+    await addToGCal(task);
+  } else if(timeVal&&syncGcal&&!gcalToken){
+    toast('Conecte o Google Calendar para sincronizar','error');
+  } else {
+    toast('Tarefa salva! ✓','success');
+  }
+};
 
 // VICIO MODAL
 window.openVM=function(eid=null){S.evid=eid;sVEmoji='📱';let v=eid?S.vicios.find(x=>x.id===eid):null;if(v)sVEmoji=v.emoji;
@@ -1134,6 +1183,111 @@ window.toggleSidebar=function(){
       document.querySelector('.content')?.classList.add('sb-collapsed');
       const btn=document.getElementById('sb-toggle-btn');
       if(btn)btn.textContent='›';
+    }
+  }catch(e){}
+})();
+
+// ── GOOGLE CALENDAR INTEGRATION ─────────────────────────────
+let gcalToken=null;
+
+async function getGCalToken(){
+  if(gcalToken) return gcalToken;
+  try{
+    const provider=new firebase.auth.GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/calendar.events');
+    provider.setCustomParameters({prompt:'none'});
+    const result=await auth.currentUser.getIdToken();
+    // Use credential from current user
+    const credential=firebase.auth.GoogleAuthProvider.credentialFromResult(
+      await auth.signInWithPopup(provider)
+    );
+    gcalToken=credential?.accessToken||null;
+    return gcalToken;
+  }catch(e){
+    console.log('GCal token error:',e);
+    return null;
+  }
+}
+
+async function addToGCal(task){
+  if(!task.time||!task.date) return;
+  try{
+    const token=gcalToken;
+    if(!token){toast('Conecte o Google Calendar nas configurações','error');return;}
+    const start=`${task.date}T${task.time}:00`;
+    const end=new Date(`${task.date}T${task.time}:00`);
+    end.setMinutes(end.getMinutes()+60);
+    const endStr=end.toISOString().slice(0,16);
+    const event={
+      summary:`✅ ${task.text}`,
+      description:`Tarefa do NORTH App
+Categoria: ${task.cat||''}
+Prioridade: ${task.prio||''}
+
+focusnorth.com.br`,
+      start:{dateTime:`${start}:00`,timeZone:'America/Sao_Paulo'},
+      end:{dateTime:`${endStr}:00`,timeZone:'America/Sao_Paulo'},
+      reminders:{useDefault:false,overrides:[{method:'popup',minutes:30}]}
+    };
+    const resp=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify(event)
+    });
+    if(resp.ok){toast('📅 Adicionado ao Google Calendar!','success');}
+    else{const err=await resp.json();console.error(err);toast('Erro ao adicionar ao Calendar','error');}
+  }catch(e){console.error(e);toast('Erro ao conectar com Google Calendar','error');}
+}
+
+async function addGoalToGCal(goal){
+  if(!goal.dueDate||!gcalToken) return;
+  try{
+    const event={
+      summary:`🎯 ${goal.emoji} ${goal.title}`,
+      description:`Meta do NORTH App
+Categoria: ${goal.category||''}
+Progresso atual: ${goal.progress||0}%
+
+focusnorth.com.br`,
+      start:{date:goal.dueDate},
+      end:{date:goal.dueDate},
+      reminders:{useDefault:false,overrides:[
+        {method:'popup',minutes:60*24*3}, // 3 dias antes
+        {method:'popup',minutes:60*24}    // 1 dia antes
+      ]}
+    };
+    const resp=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${gcalToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify(event)
+    });
+    if(resp.ok){toast('📅 Meta adicionada ao Google Calendar!','success');}
+    else{toast('Meta salva! ✓','success');}
+  }catch(e){console.error(e);toast('Meta salva! ✓','success');}
+}
+
+// Request GCal permission and store token
+window.connectGCal=async function(){
+  try{
+    const provider=new firebase.auth.GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/calendar.events');
+    const result=await auth.signInWithPopup(provider);
+    const cred=firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+    gcalToken=cred?.accessToken||null;
+    if(gcalToken){
+      try{localStorage.setItem('north-gcal','1');}catch(e){}
+      toast('Google Calendar conectado! 📅','success');
+      render();
+    }
+  }catch(e){console.error(e);toast('Erro ao conectar: '+e.message,'error');}
+};
+
+// Check if already connected
+(function(){
+  try{
+    if(localStorage.getItem('north-gcal')==='1'){
+      // Token expired on refresh — user needs to reconnect once
+      // We'll show connect button in task modal
     }
   }catch(e){}
 })();
